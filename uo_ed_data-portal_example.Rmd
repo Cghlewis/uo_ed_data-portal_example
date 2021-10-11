@@ -1,0 +1,115 @@
+---
+title: "Exploring Education Data Portal"
+author: "Crystal Lewis"
+date: "10/10/2021"
+output: html_document
+---
+
+<br>
+
+This is very bare bones data exploration into the Urban Institute's Education Data Portal. I reviewed enrollment trends for the 3 high schools in Columbia Public Schools, Columbia, MO. This is the town where I went to high school.
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+
+library(logr)
+library(tidyverse)
+library(educationdata)
+library(flextable)
+
+```
+
+
+Use the API to pull enrollment data. Then bind data together.
+
+```{r, message = FALSE, warning = FALSE, evaluate = FALSE}
+
+# Rockbridge
+
+enroll_rock <- get_education_data(level = 'schools', 
+                         source = 'ccd', 
+                         topic = 'enrollment', 
+                         filters = list(year=2015:2019, 
+                                        ncessch = '290100000299'))
+
+# Hickman
+
+enroll_hick <- get_education_data(level = 'schools', 
+                         source = 'ccd', 
+                         topic = 'enrollment', 
+                         filters = list(year=2015:2019, 
+                                        ncessch = '290100000300'))
+
+# Battle
+
+enroll_bat <- get_education_data(level = 'schools', 
+                         source = 'ccd', 
+                         topic = 'enrollment', 
+                         filters = list(year=2015:2019, 
+                                        ncessch = '290100003239'))
+
+# Directory (for school name)
+
+dir <- get_education_data(level = 'schools', 
+                         source = 'ccd', 
+                         topic = 'directory', 
+                         filters = list(year=2019,
+                                        leaid = '2901000'))
+
+# Bind 3 schools together and filter to just total enrollment (grade 99 = total)
+
+# dim(enroll_bat)
+# dim(enroll_hick)
+# dim(enroll_rock)
+
+enroll <- bind_rows(enroll_bat, enroll_hick, enroll_rock) %>%
+  filter (grade == 99)
+
+# str(enroll)
+# skimr::skim(enroll)
+
+# Join enrollment with directory for school name
+
+dir_small <- dir %>%
+  select(ncessch, school_name)
+
+enroll_names <- enroll %>%
+  left_join(dir_small, by = "ncessch")
+
+# dim(enroll_names)
+
+
+```
+
+
+Visualize enrollment over time
+
+```{r, fig.align="center"}
+
+enroll_names %>%
+  ggplot(aes(x=year, y=enrollment, color=school_name)) +
+  geom_line(stat = "identity")+
+  geom_point() + 
+  labs(title = "Enrollment by school by year", color = "School Name") +
+  scale_color_manual(values = c("sienna1", "hotpink1", "hotpink4")) +
+  theme_classic()
+```
+
+Produce a table of enrollment numbers over time
+
+```{r}
+
+enroll_names %>% 
+  select(school_name, year, enrollment) %>%
+  pivot_wider(names_from = year, 
+              values_from = enrollment,
+              names_prefix = "enroll_") %>% 
+  relocate(school_name, enroll_2015, enroll_2016, enroll_2017, enroll_2018, enroll_2019) %>%
+  set_names(toupper) %>%
+  rename_with(~ str_replace(., "_", " ")) %>%
+  flextable() %>%
+  add_header_lines(values = "Columbia Public Schools Enrollment 2015-2019", top = TRUE)
+
+
+```
+
+
